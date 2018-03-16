@@ -103,10 +103,10 @@ def int_shape(tensor):
     shape = tensor.get_shape().as_list()
     return [num if num is not None else -1 for num in shape]
 
-def avgpool2d(x, k=2):
+def avgpool2d(x, k=2, name='avgpool'):
     # avgpool wrapper
     return tf.nn.avg_pool(x, ksize=[1, k, k, 1], strides=[1, k, k, 1],
-                          padding='SAME')
+                          padding='SAME', name=name)
 
 def instance_norm(input, scope="instance_norm"):
 

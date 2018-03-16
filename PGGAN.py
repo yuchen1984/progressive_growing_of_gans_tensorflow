@@ -4,12 +4,13 @@ from utils import save_images
 from utils import CelebA
 import numpy as np
 import scipy
+import scipy.ndimage
 
 class PGGAN(object):
 
     # build model
     def __init__(self, batch_size, max_iters, model_path, read_model_path, data, sample_size, sample_path, log_dir,
-                 learn_rate, PG, t):
+                 learn_rate, PG, t, gradient_regularisation=False):
 
         self.batch_size = batch_size
         self.max_iters = max_iters
@@ -28,13 +29,14 @@ class PGGAN(object):
         self.images = tf.placeholder(tf.float32, [batch_size, self.output_size, self.output_size, self.channel])
         self.z = tf.placeholder(tf.float32, [self.batch_size, self.sample_size])
         self.alpha_tra = tf.Variable(initial_value=0.0, trainable=False,name='alpha_tra')
+        self.gradient_regularisation=gradient_regularisation
 
     def build_model_PGGan(self):
 
         self.fake_images = self.generate(self.z, pg=self.pg, t=self.trans, alpha_trans=self.alpha_tra)
 
-        _, self.D_pro_logits = self.discriminate(self.images, reuse=False, pg = self.pg, t=self.trans, alpha_trans=self.alpha_tra)
-        _, self.G_pro_logits = self.discriminate(self.fake_images, reuse=True,pg= self.pg, t=self.trans, alpha_trans=self.alpha_tra)
+        _, self.G_pro_logits = self.discriminate(self.fake_images, reuse=False,pg= self.pg, t=self.trans, alpha_trans=self.alpha_tra)
+        _, self.D_pro_logits = self.discriminate(self.images, reuse=True, pg = self.pg, t=self.trans, alpha_trans=self.alpha_tra)
 
         # the defination of loss for D and G
         self.D_loss = tf.reduce_mean(self.G_pro_logits) - tf.reduce_mean(self.D_pro_logits)
@@ -45,16 +47,17 @@ class PGGAN(object):
         self.alpha = tf.random_uniform(shape=[self.batch_size, 1, 1, 1], minval=0., maxval=1.)
         interpolates = self.images + (self.alpha * self.differences)
         _, discri_logits= self.discriminate(interpolates, reuse=True, pg=self.pg, t=self.trans, alpha_trans=self.alpha_tra)
-        gradients = tf.gradients(discri_logits, [interpolates])[0]
-
-        ##2 norm
-        slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1, 2, 3]))
-        self.gradient_penalty = tf.reduce_mean((slopes - 1.) ** 2)
-        tf.summary.scalar("gp_loss", self.gradient_penalty)
-
         self.D_origin_loss = self.D_loss
+        if self.gradient_regularisation:
+            gradients = tf.gradients(discri_logits, [interpolates])[0]
+            #print (gradients)
 
-        self.D_loss += 10 * self.gradient_penalty
+            #L2 norm
+            slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1, 2, 3]))
+            self.gradient_penalty = tf.reduce_mean((slopes - 1.) ** 2)
+            tf.summary.scalar("gp_loss", self.gradient_penalty)
+            self.D_loss += 10 * self.gradient_penalty
+            
         self.D_loss += 0.001 * tf.reduce_mean(tf.square(self.D_pro_logits - 0.0))
 
         self.log_vars.append(("generator_loss", self.G_loss))
@@ -130,7 +133,14 @@ class PGGAN(object):
 
         step_pl = tf.placeholder(tf.float32, shape=None)
         alpha_tra_assign = self.alpha_tra.assign(step_pl / self.max_iters)
-
+        
+        # momentum
+        #opti_G = tf.train.MomentumOptimizer(learning_rate=self.learning_rate, momentum=0.9).minimize(
+        #    self.G_loss, var_list=self.g_vars)
+        #opti_D = tf.train.MomentumOptimizer(learning_rate=self.learning_rate, momentum=0.9).minimize(
+        #    self.D_loss, var_list=self.d_vars)
+        
+        # adam
         opti_D = tf.train.AdamOptimizer(learning_rate=self.learning_rate, beta1=0.0 , beta2=0.99).minimize(
             self.D_loss, var_list=self.d_vars)
         opti_G = tf.train.AdamOptimizer(learning_rate=self.learning_rate, beta1=0.0 , beta2=0.99).minimize(
@@ -168,7 +178,7 @@ class PGGAN(object):
 
                     sample_z = np.random.normal(size=[self.batch_size, self.sample_size])
                     train_list = self.data_In.getNextBatch(batch_num, self.batch_size)
-                    realbatch_array = CelebA.getShapeForData(train_list, resize_w=self.output_size)
+                    realbatch_array = CelebA.getShapeForData(train_list, resize_w=self.output_size,is_crop=False)
 
                     if self.trans and self.pg != 0:
 
@@ -228,7 +238,7 @@ class PGGAN(object):
             if reuse == True:
                 scope.reuse_variables()
             if t:
-                conv_iden = avgpool2d(conv)
+                conv_iden = avgpool2d(conv, name='dis_n_avgpool2d_1_{}'.format(int(conv.get_shape()[1] / 2)))
                 #from RGB
                 conv_iden = lrelu(conv2d(conv_iden, output_dim= self.get_nf(pg - 2), k_w=1, k_h=1, d_h=1, d_w=1,
                            name='dis_y_rgb_conv_{}'.format(conv_iden.get_shape()[1])))
@@ -240,7 +250,7 @@ class PGGAN(object):
                                     name='dis_n_conv_1_{}'.format(conv.get_shape()[1])))
                 conv = lrelu(conv2d(conv, output_dim=self.get_nf(pg - 2 - i), d_h=1, d_w=1,
                                                       name='dis_n_conv_2_{}'.format(conv.get_shape()[1])))
-                conv = avgpool2d(conv, 2)
+                conv = avgpool2d(conv, 2, name='dis_n_avgpool2d_2_{}'.format(conv.get_shape()[1]))
                 if i == 0 and t:
                     conv = alpha_trans * conv + (1 - alpha_trans) * conv_iden
 
