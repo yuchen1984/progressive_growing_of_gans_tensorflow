@@ -153,7 +153,7 @@ def MinibatchstateConcat(input, averaging='all'):
         vals = tf.reshape(vals, tf.pack(input.get_shape()[0:3].as_list() + [1]))
     else:
         print ("nothing")
-   return tf.concat(3, [input, vals])
+    return tf.concat(3, [input, vals])
 
 
 
