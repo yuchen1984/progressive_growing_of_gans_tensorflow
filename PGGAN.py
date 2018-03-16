@@ -174,7 +174,7 @@ class PGGAN(object):
 
                         alpha = np.float(step) / self.max_iters
 
-                        low_realbatch_array = scipy.ndimage.zoom(realbatch_array, zoom=[1,0.5,0.5,1])
+                        low_realbatch_array = scipy.ndimage.zoom(realbatch_array, zoom=[1, 0.5, 0.5, 1])
                         low_realbatch_array = scipy.ndimage.zoom(low_realbatch_array, zoom=[1, 2, 2, 1])
                         realbatch_array = alpha * realbatch_array + (1 - alpha) * low_realbatch_array
 
@@ -231,24 +231,24 @@ class PGGAN(object):
                 conv_iden = avgpool2d(conv)
                 #from RGB
                 conv_iden = lrelu(conv2d(conv_iden, output_dim= self.get_nf(pg - 2), k_w=1, k_h=1, d_h=1, d_w=1,
-                           name='dis_y_rgb_conv_{}'.format(conv_iden.shape[1])))
+                           name='dis_y_rgb_conv_{}'.format(conv_iden.get_shape()[1])))
             # fromRGB
-            conv = lrelu(conv2d(conv, output_dim=self.get_nf(pg - 1), k_w=1, k_h=1, d_w=1, d_h=1, name='dis_y_rgb_conv_{}'.format(conv.shape[1])))
+            conv = lrelu(conv2d(conv, output_dim=self.get_nf(pg - 1), k_w=1, k_h=1, d_w=1, d_h=1, name='dis_y_rgb_conv_{}'.format(conv.get_shape()[1])))
             for i in range(pg - 1):
 
                 conv = lrelu(conv2d(conv, output_dim=self.get_nf(pg - 1 - i), d_h=1, d_w=1,
-                                    name='dis_n_conv_1_{}'.format(conv.shape[1])))
+                                    name='dis_n_conv_1_{}'.format(conv.get_shape()[1])))
                 conv = lrelu(conv2d(conv, output_dim=self.get_nf(pg - 2 - i), d_h=1, d_w=1,
-                                                      name='dis_n_conv_2_{}'.format(conv.shape[1])))
+                                                      name='dis_n_conv_2_{}'.format(conv.get_shape()[1])))
                 conv = avgpool2d(conv, 2)
                 if i == 0 and t:
                     conv = alpha_trans * conv + (1 - alpha_trans) * conv_iden
 
-            conv = MinibatchstateConcat(conv)
+            conv = MinibatchstateConcat(conv)  # This somehow cause problems when do tf.tile ops, need more investigation
             conv = lrelu(
-                conv2d(conv, output_dim=self.get_nf(1), k_w=3, k_h=3, d_h=1, d_w=1, name='dis_n_conv_1_{}'.format(conv.shape[1])))
+                conv2d(conv, output_dim=self.get_nf(1), k_w=3, k_h=3, d_h=1, d_w=1, name='dis_n_conv_1_{}'.format(conv.get_shape()[1])))
             conv = lrelu(
-                conv2d(conv, output_dim=self.get_nf(1), k_w=4, k_h=4, d_h=1, d_w=1, padding='VALID', name='dis_n_conv_2_{}'.format(conv.shape[1])))
+                conv2d(conv, output_dim=self.get_nf(1), k_w=4, k_h=4, d_h=1, d_w=1, padding='VALID', name='dis_n_conv_2_{}'.format(conv.get_shape()[1])))
             conv = tf.reshape(conv, [self.batch_size, -1])
 
             #for D
@@ -272,17 +272,17 @@ class PGGAN(object):
                 if i == pg - 2 and t:
                     #To RGB
                     de_iden = conv2d(de, output_dim=3, k_w=1, k_h=1, d_w=1, d_h=1,
-                                     name='gen_y_rgb_conv_{}'.format(de.shape[1]))
+                                     name='gen_y_rgb_conv_{}'.format(de.get_shape()[1]))
                     de_iden = upscale(de_iden, 2)
 
                 de = upscale(de, 2)
                 de = Pixl_Norm(lrelu(
-                    conv2d(de, output_dim=self.get_nf(i + 1), d_w=1, d_h=1, name='gen_n_conv_1_{}'.format(de.shape[1]))))
+                    conv2d(de, output_dim=self.get_nf(i + 1), d_w=1, d_h=1, name='gen_n_conv_1_{}'.format(de.get_shape()[1]))))
                 de = Pixl_Norm(lrelu(
-                    conv2d(de, output_dim=self.get_nf(i + 1), d_w=1, d_h=1, name='gen_n_conv_2_{}'.format(de.shape[1]))))
+                    conv2d(de, output_dim=self.get_nf(i + 1), d_w=1, d_h=1, name='gen_n_conv_2_{}'.format(de.get_shape()[1]))))
 
             #To RGB
-            de = conv2d(de, output_dim=3, k_w=1, k_h=1, d_w=1, d_h=1, name='gen_y_rgb_conv_{}'.format(de.shape[1]))
+            de = conv2d(de, output_dim=3, k_w=1, k_h=1, d_w=1, d_h=1, name='gen_y_rgb_conv_{}'.format(de.get_shape()[1]))
 
             if pg == 1:
                 return de

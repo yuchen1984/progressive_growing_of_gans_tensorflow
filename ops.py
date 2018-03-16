@@ -147,11 +147,13 @@ def MinibatchstateConcat(input, averaging='all'):
     adjusted_std = lambda x, **kwargs: tf.sqrt(tf.reduce_mean((x - tf.reduce_mean(x, **kwargs)) **2, **kwargs) + 1e-8)
     vals = adjusted_std(input, axis=0, keep_dims=True)
     if averaging == 'all':
-        vals = tf.reduce_mean(vals, keep_dims=True)
+        vals = tf.reduce_mean(vals, keep_dims=False)
+        vals = tf.expand_dims(vals, -1)
+        vals = tf.tile(vals, tf.pack([input.get_shape()[0] * input.get_shape()[1] * input.get_shape()[2]]))
+        vals = tf.reshape(vals, tf.pack(input.get_shape()[0:3].as_list() + [1]))
     else:
         print ("nothing")
-    vals = tf.tile(vals, multiples=[tf.shape(input)[0], 4, 4, 1])
-    return tf.concat([input, vals], axis=3)
+   return tf.concat(3, [input, vals])
 
 
 
